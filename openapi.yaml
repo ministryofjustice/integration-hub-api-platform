@@ -161,13 +161,14 @@ components:
       properties:
         assessmentId:
           type: string
+          format: uuid
         decision:
           type: string
-          enum: [ELIGIBLE, POTENTIALLY_ELIGIBLE, NOT_ELIGIBLE, MANUAL_REVIEW]
+          enum: [ELIGIBLE, REFER_FOR_REVIEW, NOT_ELIGIBLE]
         matchedEntitlements:
           type: array
           items:
-            type: string
+            $ref: "#/components/schemas/MatchedEntitlement"
         riskFlags:
           type: array
           items:
@@ -176,6 +177,16 @@ components:
           type: string
           format: date-time
         decisionSummary:
+          type: string
+    MatchedEntitlement:
+      type: object
+      required: [code, title, reason]
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        reason:
           type: string
     ErrorResponse:
       type: object

@@ -93,6 +93,30 @@ class LambdaHandlerTests(unittest.TestCase):
         self.assertEqual("mock-benefit-checker", body["provider"])
         self.assertEqual("bca_123", body["assessment"]["assessmentId"])
 
+    def test_success_preserves_provider_contract_shape(self):
+        provider_body = {
+            "assessmentId": "6f0804b7-c34b-352d-9dc0-a98e2caadd1d",
+            "decision": "REFER_FOR_REVIEW",
+            "matchedEntitlements": [
+                {
+                    "code": "UC-HOUSING-SUPPORT",
+                    "title": "Universal Credit Housing Support",
+                    "reason": "Universal Credit claim with income at or below the mock threshold.",
+                }
+            ],
+            "riskFlags": ["HIGH_SAVINGS"],
+            "processedAt": "2026-08-25T09:28:35.395236143Z",
+            "decisionSummary": "Potential entitlement identified, but manual review is required.",
+        }
+        api._CLIENT = Mock()
+        api._CLIENT.assess.return_value = api.ProviderResponse(201, provider_body)
+
+        response = api.lambda_handler(event(), Mock())
+        body = json.loads(response["body"])
+
+        self.assertEqual(201, response["statusCode"])
+        self.assertEqual(provider_body, body["assessment"])
+
     def test_invalid_correlation_id_uses_gateway_id(self):
         api._CLIENT = Mock()
         api._CLIENT.assess.return_value = api.ProviderResponse(201, {})
