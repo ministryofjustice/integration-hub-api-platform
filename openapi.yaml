@@ -1,0 +1,204 @@
+openapi: 3.0.3
+info:
+  title: Integration Hub Benefit Checker API
+  version: 0.1.0
+  description: Stable orchestration API for the downstream mock benefit checker.
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /v1/benefit-checks/assessments:
+    post:
+      operationId: createBenefitAssessment
+      security:
+        - basicAuth: []
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: x-correlation-id
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+            pattern: "^[A-Za-z0-9._:/-]+$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentRequest"
+      responses:
+        "201":
+          description: Assessment completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrchestratedAssessment"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+        "504":
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    Error:
+      description: Request or integration error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+          enum: [benefit-checker-orchestrator]
+    AssessmentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - firstName
+        - lastName
+        - nino
+        - dateOfBirth
+        - claimedBenefits
+        - annualIncome
+        - savingsAmount
+        - housingCostsPerMonth
+        - dependantChildren
+        - disabledApplicant
+        - caringResponsibilities
+        - postcode
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        nino:
+          type: string
+          description: National Insurance number. This value is not logged.
+          example: QQ123456C
+        dateOfBirth:
+          type: string
+          format: date
+        claimedBenefits:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        annualIncome:
+          type: number
+          minimum: 0
+        savingsAmount:
+          type: number
+          minimum: 0
+        housingCostsPerMonth:
+          type: number
+          minimum: 0
+        dependantChildren:
+          type: integer
+          minimum: 0
+        disabledApplicant:
+          type: boolean
+        caringResponsibilities:
+          type: boolean
+        postcode:
+          type: string
+          minLength: 2
+          maxLength: 10
+    OrchestratedAssessment:
+      type: object
+      required: [requestId, provider, assessment]
+      properties:
+        requestId:
+          type: string
+        provider:
+          type: string
+          enum: [mock-benefit-checker]
+        assessment:
+          $ref: "#/components/schemas/ProviderAssessment"
+    ProviderAssessment:
+      type: object
+      required:
+        - assessmentId
+        - decision
+        - matchedEntitlements
+        - riskFlags
+        - processedAt
+        - decisionSummary
+      properties:
+        assessmentId:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [ELIGIBLE, REFER_FOR_REVIEW, NOT_ELIGIBLE]
+        matchedEntitlements:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchedEntitlement"
+        riskFlags:
+          type: array
+          items:
+            type: string
+        processedAt:
+          type: string
+          format: date-time
+        decisionSummary:
+          type: string
+    MatchedEntitlement:
+      type: object
+      required: [code, title, reason]
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        reason:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [requestId, error]
+      properties:
+        requestId:
+          type: string
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
