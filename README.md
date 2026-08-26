@@ -63,8 +63,11 @@ python3 -m unittest discover -s tests -v
 ```
 
 The package is written to `build/benefit-orchestrator.zip`. Terraform remains
-in `modernisation-platform-environments`; the deployment workflow updates the
-Lambda code after infrastructure has created it.
+in `modernisation-platform-environments`, with the benefit-checker hosting
+infrastructure defined under
+`terraform/environments/integration-hub-api/api-hosting-platform`; the
+deployment workflow updates the Lambda code after infrastructure has created
+it.
 
 ## Current downstream contract
 
