@@ -28,7 +28,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != ''
     needs: test
     runs-on: ubuntu-latest
-    environment: integration-hub-api-hosting-platform-development
+    environment: integration-hub-api-platform-development
     permissions:
       contents: read
       id-token: write
@@ -45,8 +45,8 @@ jobs:
         run: |
           ./scripts/package.sh
           aws lambda update-function-code \
-            --function-name "${FUNCTION_NAME:-integration-hub-api-hosting-platform-benefit-orchestrator}" \
+            --function-name "${FUNCTION_NAME:-integration-hub-platform-benefit-orchestrator}" \
             --zip-file fileb://build/benefit-orchestrator.zip
           aws lambda update-function-code \
-            --function-name "${AUTHORIZER_FUNCTION_NAME:-integration-hub-api-hosting-platform-authorizer}" \
+            --function-name "${AUTHORIZER_FUNCTION_NAME:-integration-hub-platform-authorizer}" \
             --zip-file fileb://build/request-authorizer.zip
