@@ -5,6 +5,10 @@ consumer-to-provider flow through the Integration Hub. It exposes a stable API
 to clients and delegates benefit assessments to the downstream mock benefit
 checker.
 
+See [Pilot mock API end-to-end flow](docs/pilot-mock-api-flow.md) for the full
+journey across the upstream client, Integration Hub and downstream provider,
+including authentication boundaries, sequencing, errors and deployment order.
+
 ## API
 
 - `GET /health` - unauthenticated health check
