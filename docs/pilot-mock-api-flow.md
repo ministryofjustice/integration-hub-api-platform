@@ -22,10 +22,9 @@ benefit checker and back again.
 
 ```mermaid
 flowchart LR
-    U[Upstream mock client] -->|HTTPS POST<br/>Consumer Basic credential| G[Integration Hub<br/>API Gateway]
-    G -->|Authorisation request| A[Request authorizer<br/>Lambda]
-    A -->|Read principal and role| D[(DynamoDB)]
-    A -->|Read consumer secret| S1[Secrets Manager]
+    U[Upstream mock client] -->|HTTPS POST<br/>Entra access token| G[Integration Hub<br/>API Gateway]
+    I[Entra ID] -->|Access token| U
+    G -->|Validate JWT signature and lifetime| J[Entra signing keys]
     G -->|Authorised request| O[Benefit orchestrator<br/>Lambda]
     O -->|Read provider credential| S2[Secrets Manager]
     O -->|HTTPS POST<br/>Provider Basic credential| P[Downstream API Gateway]
@@ -51,17 +50,16 @@ sequenceDiagram
     autonumber
     participant U as Upstream mock client
     participant G as API Gateway
-    participant A as Request authorizer
+    participant A as Entra ID
     participant O as Benefit orchestrator
     participant S as Secrets Manager
     participant P as Downstream mock API
 
-    U->>G: POST /v1/benefit-checks/assessments<br/>Basic consumer credential<br/>x-correlation-id
-    G->>A: Validate Authorization header
-    A->>S: Read consumer secret
-    A-->>G: Allow with principal context
+    U->>G: POST /v1/benefit-checks/assessments<br/>Entra access token<br/>x-correlation-id
+    Note over U,A: Consumer obtains an application token before calling the API
+    G->>G: Verify JWT signature, issuer, audience and expiry
     G->>O: Invoke Lambda with request and caller context
-    O->>O: Validate JSON shape and correlation ID
+    O->>O: Check application role and consumer; validate JSON
     O->>S: Read cached provider credential when required
     O->>P: POST assessment<br/>Basic provider credential<br/>same correlation ID
     P->>P: Authenticate and validate request
@@ -86,7 +84,7 @@ POST /v1/benefit-checks/assessments
 It adds:
 
 - `Content-Type: application/json`
-- the consumer's HTTP Basic credential
+- the consumer's Entra access token
 - an optional `x-correlation-id`
 
 The client waits for the configured timeout and captures the response status,
@@ -94,16 +92,11 @@ correlation ID and JSON body.
 
 ### 2. API Gateway authenticates the consumer
 
-The assessment route uses a Lambda request authorizer. The authorizer supports:
-
-- HTTP Basic credentials for an interactive or demonstration user
-- a pilot bearer-token format for a system principal
-
-The authorizer looks up the principal and role in DynamoDB, reads the relevant
-secret from Secrets Manager and uses a constant-time comparison for the secret
-value. When authentication succeeds, it passes `principalId`, `roleName` and
-`authType` to the orchestration Lambda. Invalid credentials are rejected before
-the request reaches the orchestrator.
+The assessment route uses API Gateway's native Entra JWT authorizer. It checks
+signature, issuer, audience and token lifetime. The orchestrator requires the
+`BenefitChecker.Assess` application role, `idtyp=app` and an approved consumer
+client ID. Caller Basic credentials and the old shared bearer tokens are denied.
+See [Entra setup](entra-authentication.md) for the configuration and test steps.
 
 ### 3. The orchestrator validates the public request
 
@@ -275,8 +268,8 @@ authorizer before the orchestrator runs.
 | Setting or secret | Owner and location |
 | --- | --- |
 | Integration Hub API base URL | Supplied to the upstream client as `INTEGRATION_HUB_API_BASE_URL` |
-| Consumer Basic username and password | Integration Hub API account, stored in Secrets Manager and referenced by the authorizer's DynamoDB principal record |
-| System bearer token | Integration Hub API account, stored in Secrets Manager and referenced by the authorizer's DynamoDB principal record |
+| Entra tenant, API audience and consumer allowlist | Matching benefit-checker-api Terraform configuration |
+| Consumer application credential | Consumer-owned certificate, workload identity or approved development secret |
 | Downstream API base URL | Orchestrator environment variable `DOWNSTREAM_BENEFIT_CHECKER_URL` |
 | Provider Basic username and password | Generated in the downstream account and copied operationally into an Integration Hub-owned Secrets Manager secret |
 | Provider request timeout | `DOWNSTREAM_TIMEOUT_SECONDS`, five seconds by default |
@@ -293,8 +286,8 @@ The dependencies require this order:
 2. Deploy the downstream ECS application image and confirm its health endpoint.
 3. Apply the Integration Hub benefit-checker API infrastructure.
 4. Copy the downstream provider credential into the Integration Hub-owned secret.
-5. Replace the generated consumer credential placeholders in Secrets Manager.
-6. Deploy the authorizer and orchestrator Lambda packages from `integration-hub-api-platform`.
+5. Configure the dedicated Entra API and consumer registrations and application-role assignment.
+6. Coordinate the JWT infrastructure apply and application deployment as described in [Entra setup](entra-authentication.md).
 7. Configure the upstream client with the Integration Hub endpoint and its consumer credential.
 8. Run the end-to-end demonstration and trace the correlation ID through the logs.
 
@@ -312,7 +305,7 @@ Use the correlation ID to follow one request across the boundary.
 
 | Symptom | First checks |
 | --- | --- |
-| Consumer receives an authentication failure | Check the consumer secret value, principal record, enabled flag and role record used by the authorizer. |
+| Consumer receives an authentication failure | Check the token issuer, API audience, expiry, assessment role and approved consumer client ID. |
 | Client receives `provider_authentication_failed` | Check that the Integration Hub copy of the provider credential matches the downstream secret. A rotated ECS secret also requires a new ECS deployment. |
 | Client receives `provider_unavailable` or `provider_timeout` | Check the downstream API endpoint, ECS service health, ALB target health and the configured timeout. |
 | Client receives `provider_rejected_request` | Compare the request with `openapi.yaml` and the downstream validation constraints. |
@@ -322,7 +315,6 @@ Use the correlation ID to follow one request across the boundary.
 Relevant logs and metrics include:
 
 - Integration Hub API Gateway access logs
-- request-authorizer Lambda logs
 - benefit-orchestrator Lambda logs
 - downstream API Gateway access logs
 - downstream ECS application logs and container insights
@@ -337,7 +329,7 @@ The implementation proves routing, boundary authentication, orchestration,
 provider isolation, correlation and error normalisation. It is not a production
 benefit-checking service. Before production use, the design would need at least:
 
-- production-grade OAuth 2.0 or JWT-based machine authentication
+- production identity registrations and completed live authentication tests
 - a stable custom domain instead of a generated API Gateway URL
 - WAF controls and agreed traffic limits
 - retry backoff, idempotency and circuit-breaking decisions

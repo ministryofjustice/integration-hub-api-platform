@@ -51,6 +51,9 @@ Required Lambda environment variables:
 
 | Variable | Description |
 | --- | --- |
+| `ENTRA_TENANT_ID` | Tenant issuing the pilot API access tokens |
+| `ENTRA_API_AUDIENCE` | Dedicated pilot API application/client ID |
+| `ENTRA_ALLOWED_CLIENT_IDS` | JSON array of approved consumer application/client IDs |
 | `DOWNSTREAM_BENEFIT_CHECKER_URL` | Base URL of the downstream API |
 | `DOWNSTREAM_BASIC_AUTH_SECRET_ID` | Secrets Manager secret containing `username` and `password` |
 | `DOWNSTREAM_TIMEOUT_SECONDS` | Optional timeout, default `5` |
@@ -86,8 +89,19 @@ The orchestration API forwards that provider payload unchanged inside the
 
 ## Authentication boundaries
 
-Client credentials are validated by the API Gateway authorizer and are not
-forwarded downstream. The orchestration Lambda uses a separate provider
-credential from Secrets Manager. A downstream `401` or `403` is returned to
-clients as a provider integration failure so internal credentials are not
-exposed.
+Callers obtain an Entra v2 application access token using OAuth2 client credentials.
+API Gateway validates the signature, issuer, audience and expiry. The Lambda then
+requires `idtyp=app`, the `BenefitChecker.Assess` application role and an approved
+consumer client ID. Delegated user tokens, Basic credentials and the former shared
+bearer tokens are denied. `/health` remains public.
+
+Use a dedicated pilot API registration and role. The file-transfer API's audience
+and `FileTransfer.Upload` permission do not grant assessment access. The caller's
+access token is never forwarded to the provider. The provider uses its existing,
+separate Basic credential from Secrets Manager.
+
+See [Entra setup and testing](docs/entra-authentication.md) for registration,
+deployment and Bruno instructions. The matching infrastructure must be ready
+before merging: a merge to main deploys the application, and old Basic clients
+will stop working. The upstream mock client must obtain and send Entra tokens
+before it can call this version of the API.

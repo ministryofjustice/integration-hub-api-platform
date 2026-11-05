@@ -19,7 +19,6 @@ paths:
     post:
       operationId: createBenefitAssessment
       security:
-        - basicAuth: []
         - bearerAuth: []
       parameters:
         - in: header
@@ -56,12 +55,11 @@ paths:
           $ref: "#/components/responses/Error"
 components:
   securitySchemes:
-    basicAuth:
-      type: http
-      scheme: basic
     bearerAuth:
       type: http
       scheme: bearer
+      bearerFormat: JWT
+      description: Entra v2 application access token with BenefitChecker.Assess and an approved consumer client ID.
   responses:
     Error:
       description: Request or integration error
