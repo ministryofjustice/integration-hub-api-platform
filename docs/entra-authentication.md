@@ -5,6 +5,10 @@ The pilot-to-provider connection still uses its separate Basic credential.
 
 ## Registration
 
+Registration request: [IDAM #1014](https://github.com/ministryofjustice/staff-identity-idam-entra-infra/pull/1014).
+After its apply, use `pilot_api_configuration` for the tenant, audience, approved
+consumer ID and scope. The registration PR creates no client-secret value.
+
 Create a dedicated single-tenant benefit-checker API registration in DEVL, using
 v2 access tokens and the optional `idtyp` access-token claim. Expose an application
 role named `BenefitChecker.Assess`, allowed for applications. Require assignment
