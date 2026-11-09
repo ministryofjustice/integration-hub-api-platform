@@ -38,8 +38,8 @@ in the same window, then verify the assessment flow. Updating one side alone can
 cause temporary 401/403/503 responses. The retired authorizer package denies all
 requests and is retained only for the existing deployment workflow.
 
-The upstream mock client currently needs a matching token-acquisition change.
-Bruno can test this API directly while that client work is pending.
+The upstream token client is in [PR #5](https://github.com/ministryofjustice/integration-hub-upstream-mock-api/pull/5).
+Bruno can test this API directly before that client is enabled.
 
 ## Bruno
 
@@ -76,3 +76,20 @@ or test reports. Live testing is pending registration, apply and deployment.
 
 The design follows [AWS JWT authorizer validation](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-jwt-authorizer.html)
 and [Microsoft application claim validation](https://learn.microsoft.com/en-us/entra/identity-platform/claims-validation).
+
+## Applied development registration
+
+[IDAM deployment 42643076503](https://github.com/ministryofjustice/staff-identity-idam-entra-infra/actions/runs/42643076503)
+created these registrations:
+
+| Setting | Value |
+| --- | --- |
+| Tenant | `0bb413d7-160d-4839-868a-f3d46537f6af` |
+| API audience | `295ebc85-3771-449b-a125-1d0344e11614` |
+| Consumer client ID | `9284ec07-518e-4641-a73e-681b639255b3` |
+| Scope | `api://0bb413d7-160d-4839-868a-f3d46537f6af/integration-hub-benefit-checker-api/.default` |
+
+These identifiers are not credentials. A consumer secret was not created by the
+registration PR. Provision an approved development credential separately and keep
+it in Bruno's secret variables or the deployment secret integration. Deploy the
+matching application and infrastructure before trying the assessment endpoint.
