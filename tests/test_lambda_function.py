@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import os
 import socket
 import sys
 import unittest
@@ -11,6 +12,17 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).parents[1] / "lambda" / "benefit_orchestrator"))
 import lambda_function as api
 
+
+AUTH_ENV = {
+    "ENTRA_TENANT_ID": "tenant-test",
+    "ENTRA_API_AUDIENCE": "pilot-api-test",
+    "ENTRA_ALLOWED_CLIENT_IDS": '["consumer-test"]',
+}
+CLAIMS = {
+    "iss": "https://login.microsoftonline.com/tenant-test/v2.0",
+    "tid": "tenant-test", "aud": "pilot-api-test", "ver": "2.0",
+    "idtyp": "app", "roles": ["BenefitChecker.Assess"], "azp": "consumer-test",
+}
 
 PAYLOAD = {
     "firstName": "Ada",
@@ -35,7 +47,7 @@ def event(method="POST", path=api.ASSESSMENT_PATH, body=PAYLOAD, correlation_id=
         "requestContext": {
             "requestId": "gateway-request",
             "http": {"method": method},
-            "authorizer": {"lambda": {"principalId": "test-client"}},
+            "authorizer": {"jwt": {"claims": dict(CLAIMS)}},
         },
         "body": json.dumps(body) if body is not None else None,
     }
@@ -44,6 +56,9 @@ def event(method="POST", path=api.ASSESSMENT_PATH, body=PAYLOAD, correlation_id=
 class LambdaHandlerTests(unittest.TestCase):
     def setUp(self):
         api._CLIENT = None
+        env = patch.dict(os.environ, AUTH_ENV)
+        env.start()
+        self.addCleanup(env.stop)
 
     def test_health_does_not_initialise_provider(self):
         with patch.object(api, "_build_client") as build:

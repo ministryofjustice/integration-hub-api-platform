@@ -186,6 +186,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if method != "POST" or path != ASSESSMENT_PATH:
         return _error(404, "not_found", "Route not found", request_id)
 
+    permitted, caller, configured = _authorised_application(event)
+    if not configured:
+        return _error(503, "authentication_not_configured", "Application authentication is not configured", request_id)
+    if not permitted:
+        return _error(403, "forbidden", "Application is not authorised to request assessments", request_id)
+
     try:
         payload = _request_body(event)
     except ValueError as error:
@@ -195,7 +201,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if validation_error:
         return _error(400, "invalid_request", validation_error, request_id)
 
-    LOGGER.info(json.dumps({"event": "assessment_requested", "requestId": request_id, "caller": _caller(event)}))
+    LOGGER.info(json.dumps({"event": "assessment_requested", "requestId": request_id, "caller": caller}))
     try:
         provider = _client().assess(payload, request_id)
     except ConfigurationError:
@@ -264,9 +270,43 @@ def _request_id(event: dict[str, Any], context: Any) -> str:
     return str(gateway_id or getattr(context, "aws_request_id", None) or uuid.uuid4())
 
 
-def _caller(event: dict[str, Any]) -> str:
-    authorizer = event.get("requestContext", {}).get("authorizer", {}).get("lambda", {})
-    return str(authorizer.get("principalId") or authorizer.get("username") or "unknown")
+def _authorised_application(event):
+    """Use only claims verified by API Gateway's native JWT authorizer.
+
+    Signature and lifetime validation happen at the gateway. Never decode a
+    caller-supplied Authorization header here as a substitute for that check.
+    """
+    tenant = os.getenv("ENTRA_TENANT_ID", "").strip()
+    audience = os.getenv("ENTRA_API_AUDIENCE", "").strip()
+    try:
+        allowed = json.loads(os.getenv("ENTRA_ALLOWED_CLIENT_IDS", "[]"))
+        if not tenant or not audience or not isinstance(allowed, list) or not allowed:
+            return False, None, False
+        if not all(isinstance(client, str) and client for client in allowed):
+            return False, None, False
+    except (TypeError, ValueError):
+        return False, None, False
+    claims = event.get("requestContext", {}).get("authorizer", {}).get("jwt", {}).get("claims")
+    if not isinstance(claims, dict):
+        return False, None, True
+    roles = claims.get("roles", [])
+    if isinstance(roles, str):
+        try:
+            roles = json.loads(roles)
+        except ValueError:
+            roles = []
+    permitted = (
+        claims.get("iss") == f"https://login.microsoftonline.com/{tenant}/v2.0"
+        and claims.get("tid") == tenant
+        and claims.get("aud") == audience
+        and claims.get("ver") == "2.0"
+        and claims.get("idtyp") == "app"
+        and "scp" not in claims
+        and isinstance(roles, list)
+        and "BenefitChecker.Assess" in roles
+        and claims.get("azp") in allowed
+    )
+    return permitted, claims.get("azp") if permitted else None, True
 
 
 def _provider_message(body: dict[str, Any]) -> str:
