@@ -270,6 +270,25 @@ def _request_id(event: dict[str, Any], context: Any) -> str:
     return str(gateway_id or getattr(context, "aws_request_id", None) or uuid.uuid4())
 
 
+def _application_roles(value):
+    """Normalise native JWT roles, including API Gateway's flattened arrays."""
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            value = json.loads(text)
+        except ValueError:
+            if text.startswith("[") != text.endswith("]"):
+                return []
+            if text.startswith("["):
+                text = text[1:-1]
+            value = [role.strip() for role in text.split(",")]
+            if not all(re.fullmatch(r"[A-Za-z0-9._:-]+", role) for role in value):
+                return []
+        if isinstance(value, str):
+            value = [value]
+    return value if isinstance(value, list) and all(isinstance(role, str) for role in value) else []
+
+
 def _authorised_application(event):
     """Use only claims verified by API Gateway's native JWT authorizer.
 
@@ -289,12 +308,7 @@ def _authorised_application(event):
     claims = event.get("requestContext", {}).get("authorizer", {}).get("jwt", {}).get("claims")
     if not isinstance(claims, dict):
         return False, None, True
-    roles = claims.get("roles", [])
-    if isinstance(roles, str):
-        try:
-            roles = json.loads(roles)
-        except ValueError:
-            roles = []
+    roles = _application_roles(claims.get("roles", []))
     permitted = (
         claims.get("iss") == f"https://login.microsoftonline.com/{tenant}/v2.0"
         and claims.get("tid") == tenant

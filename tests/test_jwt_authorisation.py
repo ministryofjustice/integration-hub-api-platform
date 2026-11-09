@@ -41,3 +41,22 @@ class JwtAuthorisationTests(unittest.TestCase):
         request = event()
         request["requestContext"]["authorizer"]["jwt"]["claims"]["roles"] = json.dumps(["BenefitChecker.Assess"])
         self.assertTrue(api._authorised_application(request)[0])
+
+    def test_gateway_role_formats_allow_exact_assessment_role(self):
+        for roles in [["BenefitChecker.Assess"], '["BenefitChecker.Assess"]',
+                      "[BenefitChecker.Assess]", "BenefitChecker.Assess",
+                      "[Other.Role, BenefitChecker.Assess]", "Other.Role,BenefitChecker.Assess"]:
+            with self.subTest(roles=roles):
+                request = event()
+                request["requestContext"]["authorizer"]["jwt"]["claims"]["roles"] = roles
+                self.assertTrue(api._authorised_application(request)[0])
+
+    def test_malformed_or_similar_roles_remain_denied(self):
+        for roles in [None, {}, 1, ["BenefitChecker.Assess", 1], "[]", "[BenefitChecker.Assess",
+                      "BenefitChecker.Assess]", "[BenefitChecker.AssessExtra]",
+                      "[FileTransfer.Upload]", '{BenefitChecker.Assess}', "OtherBenefitChecker.Assess"]:
+            with self.subTest(roles=roles):
+                request = event()
+                request["requestContext"]["authorizer"]["jwt"]["claims"]["roles"] = roles
+                self.assertFalse(api._authorised_application(request)[0])
+        self.provider.assess.assert_not_called()
